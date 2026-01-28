@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Leaflet SVG 垂直折线卡片</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .card-rect {
+      fill: #ffffff;
+      stroke: #3a6cff;
+      stroke-width: 2;
+      rx: 6;
+      ry: 6;
+    }
+
+    .card-text {
+      font-size: 14px;
+      fill: #000;
+      pointer-events: none;
+    }
+
+    .card-title {
+      font-weight: bold;
+    }
+
+    .line {
+      stroke: #3a6cff;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .point {
+      fill: #3a6cff;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<div style="position:absolute;top:10px;left:10px;z-index:1000;">
+  <input type="file" id="xlsxInput" accept=".xlsx,.xls" />
+</div>
+
+<script>
+document.getElementById('xlsxInput').addEventListener('change', handleFile);
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function (evt) {
+    const data = new Uint8Array(evt.target.result);
+
+    // 读取 workbook
+    const workbook = XLSX.read(data, { type: 'array' });
+
+    // 默认读第一个 sheet
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    // 转为 JSON
+    const json = XLSX.utils.sheet_to_json(sheet, {
+      defval: null   // 空单元格不丢
+    });
+
+    console.log('Excel 数据：', json);
+
+    // 👉 这里就是你后续接地图的入口
+    processExcelData(json);
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+function processExcelData(rows) {
+  /*
+    rows 示例：
+    [
+      { 国家: "印度", 纬度: 28.6, 经度: 77.2, 出口: 41.6, 增幅: 24.6 },
+      { 国家: "美国", 纬度: 38.0, 经度: -97.0, 出口: 55.2, 增幅: 12.1 }
+    ]
+  */
+
+  rows.forEach(row => {
+    console.log(row.国家, row.纬度, row.经度);
+    // 👉 这里可以：
+    // - 生成地图点
+    // - 生成卡片
+    // - 生成折线
+  });
+}
+</script>
+
+
+<!--  地图绘制部分 -->
+<script>
+/* =========================
+   地图初始化
+========================= */
+const map = L.map('map').setView([0, 0], 2);
+//
+//
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  noWrap: true,
+  attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+
+
+
+
+/* =========================
+   数据
+========================= */
+const pointLatLng = [28.6139, 77.2090];
+const cardLatLng  = [33.0, 63.0];
+
+const CARD_W = 180;
+const CARD_H = 90;
+
+/* =========================
+   SVG Layer
+========================= */
+L.svg().addTo(map);
+const svg = map.getPanes().overlayPane.querySelector('svg');
+
+/* =========================
+   元素创建
+========================= */
+
+// 点
+const point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+point.setAttribute('r', 5);
+point.setAttribute('class', 'point');
+svg.appendChild(point);
+
+// 折线
+const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+line.setAttribute('class', 'line');
+svg.appendChild(line);
+
+// 卡片（g 容器）
+const card = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+svg.appendChild(card);
+
+// 卡片背景
+const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+rect.setAttribute('class', 'card-rect');
+rect.setAttribute('width', CARD_W);
+rect.setAttribute('height', CARD_H);
+card.appendChild(rect);
+
+// 文本
+[
+  { y: 22, text: '（一）印度', cls: 'card-title' },
+  { y: 44, text: '出口：41.6 亿元' },
+  { y: 62, text: '增幅：24.6%' },
+  { y: 80, text: '占比：27.9%' }
+].forEach(r => {
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('x', 12);
+  t.setAttribute('y', r.y);
+  t.setAttribute('class', `card-text ${r.cls || ''}`);
+  t.textContent = r.text;
+  card.appendChild(t);
+});
+
+/* =========================
+   更新函数（核心）
+========================= */
+function update() {
+  const p = map.latLngToLayerPoint(pointLatLng);
+  const c = map.latLngToLayerPoint(cardLatLng);
+
+  // 点
+  point.setAttribute('cx', p.x);
+  point.setAttribute('cy', p.y);
+
+  // 卡片位置（左上角）
+  card.setAttribute(
+    'transform',
+    `translate(${c.x}, ${c.y})`
+  );
+
+  // 折线：竖直 → 水平
+  const midY = c.y + CARD_H / 2;
+
+  line.setAttribute(
+    'points',
+    `
+      ${p.x},${p.y}
+      ${p.x},${midY}
+      ${c.x},${midY}
+    `
+  );
+}
+
+/* =========================
+   事件
+========================= */
+map.on('zoom move zoomend moveend', update);
+update();
+</script>
+
+</body>
+</html>
