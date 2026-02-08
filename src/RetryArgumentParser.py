@@ -54,4 +54,5 @@ class RetryArgumentParser(argparse.ArgumentParser):
         raise argparse.ArgumentError(None, "解析失败")
 
     def get_file_path(self) -> Optional[str]:
+        print()
 
